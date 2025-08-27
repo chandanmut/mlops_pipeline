@@ -1,0 +1,8 @@
+apache-airflow
+boto3
+pandas
+pyarrow
+sqlalchemy
+psycopg2-binary
+mlflow
+scikit-learn

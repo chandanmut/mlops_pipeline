@@ -1,0 +1,58 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes: [ "pgdata:/var/lib/postgresql/data" ]
+
+  warehouse:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: wh
+      POSTGRES_PASSWORD: wh
+      POSTGRES_DB: gold
+    volumes: [ "whdata:/var/lib/postgresql/data" ]
+    ports: [ "5433:5432" ]
+
+  airflow:
+    build: .                      # uses the Dockerfile above
+    depends_on: [ postgres, warehouse ]
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__WEBSERVER__SECRET_KEY: change_me
+      S3_RAW_BUCKET: ${S3_RAW_BUCKET}
+      S3_PREFIX: ${S3_PREFIX}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_REGION}
+      WAREHOUSE_URL: postgresql+psycopg2://wh:wh@warehouse:5432/gold
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./data_pipeline:/opt/airflow/data_pipeline
+      - ./model:/opt/airflow/model
+    command: bash -c "airflow db migrate && airflow users create --username admin --firstname a --lastname a --role Admin --email a@a.com --password admin || true && airflow webserver & airflow scheduler"
+    ports: [ "8080:8080" ]
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.14.2
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root s3://${MLFLOW_ARTIFACTS_BUCKET}
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_REGION}
+      MLFLOW_ARTIFACTS_BUCKET: ${MLFLOW_ARTIFACTS_BUCKET}
+    volumes: [ "./mlflow:/mlflow" ]
+    ports: [ "5001:5000" ]
+
+volumes:
+  pgdata:
+  whdata:
