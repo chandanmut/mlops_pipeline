@@ -1,24 +1,9 @@
 version: "3.9"
+
 services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
-    volumes: [ "pgdata:/var/lib/postgresql/data" ]
-
-  warehouse:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: wh
-      POSTGRES_PASSWORD: wh
-      POSTGRES_DB: gold
-    volumes: [ "whdata:/var/lib/postgresql/data" ]
-    ports: [ "5433:5432" ]
-
-  airflow:
-    build: .                      # uses the Dockerfile above
+  # --- Airflow Webserver ---
+  airflow-webserver:
+    build: .
     depends_on: [ postgres, warehouse ]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
@@ -36,22 +21,66 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./data_pipeline:/opt/airflow/data_pipeline
       - ./model:/opt/airflow/model
-    command: bash -c "airflow db migrate && airflow users create --username admin --firstname a --lastname a --role Admin --email a@a.com --password admin || true && airflow webserver & airflow scheduler"
-    ports: [ "8080:8080" ]
+    command: bash -c "airflow db migrate && \
+                      airflow users create --username admin --firstname a --lastname a --role Admin --email a@a.com --password admin || true && \
+                      airflow webserver --port 8080"
+    ports:
+      - "8080:8080"
 
+  # --- Airflow Scheduler ---
+  airflow-scheduler:
+    build: .
+    depends_on: [ postgres ]
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_REGION}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./data_pipeline:/opt/airflow/data_pipeline
+      - ./model:/opt/airflow/model
+    command: airflow scheduler
+
+  # --- Airflow Metadata DB ---
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # --- Feature Warehouse ---
+  warehouse:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: wh
+      POSTGRES_PASSWORD: wh
+      POSTGRES_DB: gold
+    ports:
+      - "5433:5432"
+    volumes:
+      - whdata:/var/lib/postgresql/data
+
+  # --- MLflow ---
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.14.2
     command: >
       mlflow server --host 0.0.0.0 --port 5000
       --backend-store-uri sqlite:///mlflow.db
-      --default-artifact-root s3://${MLFLOW_ARTIFACTS_BUCKET}
+      --default-artifact-root /mlflow/artifacts
     environment:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_DEFAULT_REGION: ${AWS_REGION}
       MLFLOW_ARTIFACTS_BUCKET: ${MLFLOW_ARTIFACTS_BUCKET}
-    volumes: [ "./mlflow:/mlflow" ]
-    ports: [ "5001:5000" ]
+    volumes:
+      - ./mlflow:/mlflow
+    ports:
+      - "5001:5000"
 
 volumes:
   pgdata:
