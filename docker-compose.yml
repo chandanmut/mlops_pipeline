@@ -4,10 +4,10 @@ services:
   # --- Airflow Webserver ---
   airflow-webserver:
     build: .
-    depends_on: [ postgres, warehouse ]
+    depends_on: [postgres, warehouse]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
       AIRFLOW__WEBSERVER__SECRET_KEY: change_me
       S3_RAW_BUCKET: ${S3_RAW_BUCKET}
@@ -21,19 +21,20 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./data_pipeline:/opt/airflow/data_pipeline
       - ./model:/opt/airflow/model
-    command: bash -c "airflow db migrate && \
-                      airflow users create --username admin --firstname a --lastname a --role Admin --email a@a.com --password admin || true && \
-                      airflow webserver --port 8080"
+    command: >
+      sh -c "airflow db migrate &&
+             airflow users create --username admin --firstname a --lastname a --role Admin --email a@a.com --password admin || true &&
+             airflow webserver --port 8080"
     ports:
       - "8080:8080"
 
   # --- Airflow Scheduler ---
   airflow-scheduler:
     build: .
-    depends_on: [ postgres ]
+    depends_on: [postgres]
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres:5432/airflow
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
       AWS_DEFAULT_REGION: ${AWS_REGION}
